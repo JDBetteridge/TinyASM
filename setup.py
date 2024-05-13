@@ -1,63 +1,34 @@
 import os
-import re
-import sys
-import platform
-import subprocess
+import petsc4py
 
-from setuptools import setup, Extension
-from setuptools.command.build_ext import build_ext
-from distutils.version import LooseVersion
+from glob import glob
+from setuptools import setup
+from pybind11.setup_helpers import Pybind11Extension, build_ext
 
+petsc = petsc4py.get_config()
+petsc_path = petsc_lib = os.path.join(
+    petsc4py.get_config()['PETSC_DIR'],
+    petsc4py.get_config()['PETSC_ARCH']
+)
+petsc_include = os.path.join(petsc_path, 'include')
+petsc_library = os.path.join(petsc_path, 'lib')
 
-class CMakeExtension(Extension):
-    def __init__(self, name, sourcedir=''):
-        Extension.__init__(self, name, sources=[])
-        self.sourcedir = os.path.abspath(sourcedir)
+ext_modules = [
+    Pybind11Extension(
+        name="tinyasm._tinyasm",
+        sources=sorted(glob("tinyasm/*.cpp")),  # Sort source files for reproducibility
+        include_dirs=[petsc_include, petsc4py.get_include()],
+        library_dirs=[petsc_library],
+        extra_link_args=['-lpetsc',],
+        runtime_library_dirs=[petsc_library],
+    ),
+]
 
-
-class CMakeBuild(build_ext):
-    def run(self):
-        try:
-            out = subprocess.check_output(['cmake', '--version'])
-        except OSError:
-            raise RuntimeError("CMake must be installed to build the following extensions: " +
-                               ", ".join(e.name for e in self.extensions))
-
-        if platform.system() == "Windows":
-            cmake_version = LooseVersion(re.search(r'version\s*([\d.]+)', out.decode()).group(1))
-            if cmake_version < '3.1.0':
-                raise RuntimeError("CMake >= 3.1.0 is required on Windows")
-
-        for ext in self.extensions:
-            self.build_extension(ext)
-
-    def build_extension(self, ext):
-        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
-        cmake_args = ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=' + extdir + '\\' + ext.name,
-                      '-DPYTHON_EXECUTABLE=' + sys.executable]
-
-
-        cfg = 'Debug' if self.debug else 'Release'
-        build_args = ['--config', cfg]
-
-        if platform.system() == "Windows":
-            cmake_args += ['-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}'.format(cfg.upper(), extdir)]
-            if sys.maxsize > 2**32:
-                cmake_args += ['-A', 'x64']
-            build_args += ['--', '/m']
-        else:
-            cmake_args += ['-DCMAKE_BUILD_TYPE=' + cfg]
-            build_args += ['--', '-j2']
-        import petsc4py
-        cmake_args += ['-DPETSC_DIR=' + petsc4py.get_config()['PETSC_DIR']]
-        cmake_args += ['-DPETSC_ARCH=' + petsc4py.get_config()['PETSC_ARCH']]
-        env = os.environ.copy()
-        env['CXXFLAGS'] = '{} -DVERSION_INFO=\\"{}\\"'.format(env.get('CXXFLAGS', ''),
-                                                              self.distribution.get_version())
-        if not os.path.exists(self.build_temp):
-            os.makedirs(self.build_temp)
-        subprocess.check_call(['cmake', ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env)
-        subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp)
+description = r'''
+The goal of this is to give a) fast performance for small local patches and b)
+provide a playground for experimenting with new patch features that does not
+require digging deep into PETSc.
+'''
 
 setup(
     name='tinyasm',
@@ -65,9 +36,9 @@ setup(
     author='Florian Wechsung',
     author_email='wechsung@nyu.edu',
     description='A tiny implementation of PETSc PCASM.',
-    long_description='The goal of this is to give a) fast performance for small local patches and b) provide a playground for experimenting with new patch features that does not require digging deep into PETSc.',
-    ext_modules=[CMakeExtension('tinyasm')],
+    long_description=description,
     packages=['tinyasm'],
-    cmdclass=dict(build_ext=CMakeBuild),
+    ext_modules=ext_modules,
+    cmdclass={"build_ext": build_ext},
     zip_safe=False,
 )
