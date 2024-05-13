@@ -37,6 +37,7 @@ setup(
     author_email='wechsung@nyu.edu',
     description='A tiny implementation of PETSc PCASM.',
     long_description=description,
+    install_requires=['pybind11'],
     packages=['tinyasm'],
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},
