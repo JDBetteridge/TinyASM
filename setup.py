@@ -24,7 +24,7 @@ ext_modules = [
         include_dirs=petsc_include,
         library_dirs=petsc_library,
         extra_link_args=['-lpetsc',],
-        runtime_library_dirs=[petsc_library],
+        runtime_library_dirs=petsc_library,
     ),
 ]
 
